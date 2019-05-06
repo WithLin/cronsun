@@ -101,17 +101,35 @@ func (c *Client) KeepAliveOnce(id client.LeaseID) (*client.LeaseKeepAliveRespons
 func (c *Client) GetLock(key string, id client.LeaseID) (bool, error) {
 	key = conf.Config.Lock + key
 	ctx, cancel := NewEtcdTimeoutContext(c)
-	resp, err := DefalutClient.Txn(ctx).
-		If(client.Compare(client.CreateRevision(key), "=", 0)).
-		Then(client.OpPut(key, "", client.WithLease(id))).
-		Commit()
-	cancel()
+	// resp, err := DefalutClient.Txn(ctx).
+	// 	If(client.Compare(client.CreateRevision(key), "=", 0)).
+	// 	Then(client.OpPut(key, "", client.WithLease(id))).
+	// 	Commit()
+	// cancel()
 
+	// if err != nil {
+	// 	return false, err
+	// }
+
+	// return resp.Succeeded, nil
+	s, err := concurrency.NewSession(DefalutClient.Client)
 	if err != nil {
+		log.Debugf("open session err")
+		return false,err
+	}
+	defer  s.Close()
+
+	m := concurrency.NewMutex(s, key)
+
+	if err := m.Lock(ctx); err != nil {
+		log.Debugf("acquired lock err")
 		return false, err
 	}
 
-	return resp.Succeeded, nil
+	cancel()
+
+	log.Debugf("acquired lock success")
+	return true, nil
 }
 
 func (c *Client) DelLock(key string) error {
